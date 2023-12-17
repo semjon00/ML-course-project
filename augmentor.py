@@ -6,17 +6,16 @@ import pandas
 import PIL.Image
 import PIL
 import numpy
+import time
+from datetime import datetime
 PIL.Image.MAX_IMAGE_PIXELS = None  # Otherwise it thinks that the images are oversized and may be compression bombs
-
-# TODO: Soft target - crops should also contain marked targets.
 
 tma_crops = 2000  # Per image, there are 25 TMA images in the training set
 non_tma_crops = 300  # Per image, there are 513 non-TMA images
 
 boring_cutoff = 0.3  # pictures with bigger proportion of boring pixels will be discarded
 borders_expansion = 0.1  # Expand picture by how much on the sides? Useful for better representing borders
-# TODO: We should totally account for different modes (20x vs 40x)
-aug_side_proportion = 0.1  # Crop lenght as a fraction of longest side of input
+aug_side_proportion = 0.1  # Crop lenght as a fraction of longest side of input, double for TMA
 aug_side_proportion_var = 0.1  # Crop length variation
 aug_side_px = 786  # Crop will be downscaled to size (aug_side_px, aug_side_px)
 do_random_flip = True  # Whether to allow augmenter to flip cuts.
@@ -27,7 +26,7 @@ mask_path = Path('data') / 'masks'
 to_path = Path('data') / 'augmented'
 main_csv = Path('data') / 'train.csv'
 
-def augmenting_generator(picture: PIL.Image, n_crops: int, tumor_class=None, mask=None):
+def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure'):
     max_side = max(picture.size)
 
     def p_to_px(p):
@@ -39,6 +38,13 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, tumor_class=None, mas
         pc_size = size * (math.sin(pc_size) + math.cos(pc_size))
         return pc_size
 
+    def make_crop(picture, chosen, pc_size):
+        pre_crop = picture.crop((p_to_px(chosen[0]), p_to_px(chosen[1]),
+                                 p_to_px(chosen[0]) + p_to_px(pc_size), p_to_px(chosen[1]) + p_to_px(pc_size)))
+        pre_crop = pre_crop.rotate(angle / math.tau * 360.0)
+        rot_off = (pre_crop.size[0] - p_to_px(size)) // 2
+        return pre_crop.crop((rot_off, rot_off, pre_crop.size[0] - rot_off, pre_crop.size[1] - rot_off))
+
     succesful = 0
     total = 0
     while succesful < n_crops:
@@ -48,19 +54,15 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, tumor_class=None, mas
 
         angle = random.uniform(0, math.tau)
         size = aug_side_proportion * (1.0 + random.uniform(-aug_side_proportion_var, aug_side_proportion_var))
+        if it == 'tma' or it == 'unsure' and random.random() > 0.5:
+            size *= 2.0
         pc_size = pre_crop_size(angle, size)
 
         chosen = []
         for side_prop in [x / max_side for x in picture.size]:
             chosen.append(random.uniform(-borders_expansion, side_prop + borders_expansion - pc_size))
-        pre_crop = picture.crop((p_to_px(chosen[0]), p_to_px(chosen[1]),
-                                 p_to_px(chosen[0]) + p_to_px(pc_size), p_to_px(chosen[1]) + p_to_px(pc_size)))
 
-        pre_crop = pre_crop.rotate(angle / math.tau * 360.0)
-        rot_off = (pre_crop.size[0] - p_to_px(size)) // 2
-        pre_crop = pre_crop.crop((rot_off, rot_off, pre_crop.size[0] - rot_off, pre_crop.size[1] - rot_off))
-
-        crop = pre_crop.resize((aug_side_px, aug_side_px), PIL.Image.Resampling.LANCZOS)
+        crop = make_crop(picture, chosen, pc_size).resize((aug_side_px, aug_side_px), PIL.Image.Resampling.LANCZOS)
         if do_random_flip and random.randint(0, 1) == 1:
             crop = crop.transpose(PIL.Image.FLIP_TOP_BOTTOM)
 
@@ -70,11 +72,21 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, tumor_class=None, mas
         if boring > boring_cutoff:
             continue
 
+        # Base confidence - no idea what part of the image is cancer
+        confidence = 0.2  # YOLO
+        if mask:
+            mask_crop = make_crop(mask, chosen, pc_size)
+            confidence = numpy.average(numpy.array(mask_crop)[:, :, 0]) / 255
         succesful += 1
-        yield crop, 1.0
+        yield crop, confidence
 
 
 if __name__ == '__main__':
+    done_crops = 0
+    processed_images = 0
+    last_reported = time.time()
+    print(f'Cropper-chopper 2000 launched at {datetime.fromtimestamp(last_reported)}')
+
     csv_data = pandas.read_csv(main_csv)
     source_files = list(Path(source_path).rglob("*.[pP][nN][gG]"))
     mask_files = os.listdir(mask_path)
@@ -93,13 +105,20 @@ if __name__ == '__main__':
         if p in mask_files:
             mask = PIL.Image.open(mask_path / p)
         i = 0
-        for crop, confidence in augmenting_generator(picture=img, n_crops=20, tumor_class=tumor_class, mask=mask):
+        for crop, confidence in augmenting_generator(picture=img, n_crops=20, mask=mask, it=to_path_suffix):
+            if time.time() > last_reported + 60:
+                last_reported = time.time()
+                print(f'{datetime.utcfromtimestamp(last_reported)}  Crops: {done_crops}, images: {processed_images}')
             save_to = to_path / to_path_suffix / Path(*pat.parts[2:-1])
             save_to.mkdir(parents=True, exist_ok=True)
             fn = f'crop_{str(p).split(".")[0]}_{i}'
             crop.save(save_to / str(fn + '.png'))
+            crop.close()
             open(save_to / str(fn + '.txt'), 'w').write(f'{tumor_class} {confidence}')
             i += 1
+            done_crops += 1
         img.close()
         if mask is not None:
             mask.close()
+        processed_images += 1
+    print(f'Cropper-chopper 2000 gracefully stopped at {datetime.fromtimestamp(last_reported)}')

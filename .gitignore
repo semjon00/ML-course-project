@@ -1,1 +1,4 @@
 **/.idea
+data/augmented
+data/masks
+data/source
