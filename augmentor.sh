@@ -10,4 +10,6 @@
 cd /gpfs/space/home/amlk/data
 
 module load python/3.9.12
+module load py-pandas/1.1.4
+module load py-numpy/1.19.2
 srun python3.9.12 augmentor.py
