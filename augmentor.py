@@ -82,6 +82,27 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure
         yield crop, confidence
 
 
+def train_val_split(csv_data):
+    print('Causing train-val split!')
+
+    pictures = os.listdir(source_path)
+    tma = [p for p in pictures if any([csv_data.loc[csv_data['image_id'] == int(p.split('.')[0])] for p in pictures][0]['is_tma'])]
+    non_tma = [p for p in pictures if p not in tma]
+
+    (source_path / 'train').mkdir(parents=True, exist_ok=True)
+    (source_path / 'val').mkdir(parents=True, exist_ok=True)
+
+    def distribute(ptype):
+        random.shuffle(ptype)
+        for p in ptype[:int(len(ptype) * 0.8 + 0.99)]:
+            os.rename(source_path / p, source_path / 'train' / p)
+        for p in ptype[int(len(ptype) * 0.8 + 0.99):]:
+            os.rename(source_path / p, source_path / 'val' / p)
+    distribute(tma)
+    distribute(non_tma)
+    print('Split done!')
+
+
 if __name__ == '__main__':
     done_crops = 0
     processed_images = 0
@@ -91,6 +112,10 @@ if __name__ == '__main__':
           f'aug_side_px={aug_side_px}, aug_side_proportion={aug_side_proportion}')
 
     csv_data = pandas.read_csv(main_csv)
+    if 'train' not in os.listdir(source_path):
+        # Not yet divided
+        train_val_split(csv_data)
+
     source_files = list(Path(source_path).rglob("*.[pP][nN][gG]"))
     mask_files = os.listdir(mask_path)
     to_path.mkdir(parents=True, exist_ok=True)
