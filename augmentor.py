@@ -16,7 +16,7 @@ non_tma_crops = 300  # Per image, there are 513 non-TMA images
 
 boring_cutoff = 0.45  # pictures with bigger proportion of boring pixels will be discarded
 borders_expansion = 0.1  # Expand picture by how much on the sides? Useful for better representing borders
-aug_side_proportion = 0.75  # Crop length as a fraction of longest side of input, double for TMA
+aug_side_proportion = 0.075  # Crop length as a fraction of longest side of input, double for TMA
 aug_side_proportion_var = 0.2  # Crop length variation
 aug_side_px = 512  # Crop will be downscaled to size (aug_side_px, aug_side_px)
 do_random_flip = True  # Whether to allow augmenter to flip cuts.
