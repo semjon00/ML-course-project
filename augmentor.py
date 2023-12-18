@@ -11,6 +11,8 @@ from datetime import datetime
 import traceback
 PIL.Image.MAX_IMAGE_PIXELS = None  # Otherwise it thinks that the images are oversized and may be compression bombs
 
+yolo_confidence_score = 0.2
+
 tma_crops = 1200  # Per image, there are 25 TMA images in the training set
 non_tma_crops = 300  # Per image, there are 513 non-TMA images
 
@@ -74,7 +76,7 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure
             continue
 
         # Base confidence - no idea what part of the image is cancer
-        confidence = 0.2  # YOLO
+        confidence = yolo_confidence_score  # YOLO
         if mask:
             mask_crop = make_crop(mask, chosen, pc_size)
             confidence = numpy.average(numpy.array(mask_crop)[:, :, 0]) / 255
