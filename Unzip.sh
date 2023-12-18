@@ -5,4 +5,4 @@
 #SBATCH --error=unzip_error.lo
 
 module load python
-srun puthon ./extract_hpc.py
+srun python ./extract_hpc.py
