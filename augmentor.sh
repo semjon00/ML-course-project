@@ -9,5 +9,5 @@
 
 cd /gpfs/space/home/amlk/data
 
-module load python
-srun python ./augmentor.py
+module load python/3.9.12
+srun python3.9.12 augmentor.py
