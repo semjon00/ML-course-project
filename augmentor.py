@@ -15,7 +15,7 @@ non_tma_crops = 300  # Per image, there are 513 non-TMA images
 
 boring_cutoff = 0.3  # pictures with bigger proportion of boring pixels will be discarded
 borders_expansion = 0.1  # Expand picture by how much on the sides? Useful for better representing borders
-aug_side_proportion = 0.1  # Crop lenght as a fraction of longest side of input, double for TMA
+aug_side_proportion = 0.1  # Crop length as a fraction of longest side of input, double for TMA
 aug_side_proportion_var = 0.1  # Crop length variation
 aug_side_px = 786  # Crop will be downscaled to size (aug_side_px, aug_side_px)
 do_random_flip = True  # Whether to allow augmenter to flip cuts.
@@ -86,6 +86,8 @@ if __name__ == '__main__':
     processed_images = 0
     last_reported = time.time()
     print(f'Cropper-chopper 2000 launched at {datetime.fromtimestamp(last_reported)}')
+    print(f'tma_crops={tma_crops}, non_tma_crops={non_tma_crops}, '
+          f'aug_side_px={aug_side_px}, aug_side_proportion={aug_side_proportion}')
 
     csv_data = pandas.read_csv(main_csv)
     source_files = list(Path(source_path).rglob("*.[pP][nN][gG]"))
