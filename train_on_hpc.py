@@ -5,17 +5,20 @@ import os
 import pandas as pd
 import numpy as np
 from PIL import Image
+from pathlib import Path
+import pandas
 
-from keras.applications.resnet50 import ResNet50
+from tensorflow.keras.applications.resnet import ResNet101
 from keras.models import Model
+from keras.models import load_model, save_model
 from keras.layers import Dense, GlobalAveragePooling2D
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import balanced_accuracy_score
 
 # Paths
-aug_wsi_images = '/kaggle/input/augmented/augmented/wsi'
-aug_tma_images = '/kaggle/input/augmented/augmented/tma'
-model_file = '/kaggle/working/model.h5'
+data_path = Path('./data/augmented/')
+main_csv = './data/train.csv'
+model_file = './models/model_last'
 
 classes = ['CC', 'EC', 'HGSC', 'LGSC', 'MC']
 
@@ -41,8 +44,8 @@ def one_hot_to_values(vector, classes):
         values.append(value)
     return np.array(values)
 
-# To load images and labels from 'root' folder
-def load_data(root):
+
+def loaddddd(root):
     files = os.listdir(root)
     n = len(files)
     images = []
@@ -58,7 +61,7 @@ def load_data(root):
                     label, confidence = label_file.read().strip().split()
                 image_path = os.path.join(root, file)
                 image = Image.open(image_path)
-                image = image.resize((224,224)) # Resizing to 244x244 for Resnet model
+                image = image.resize((224, 224)) # Resizing to 244x244 for Resnet model
                 images.append(np.array(image))
                 labels.append(label)
                 confidences.append(confidence)
@@ -71,56 +74,37 @@ def load_data(root):
     return images, labels_one_hot, confidences
 
 
+def load_data():
+    img_filenames = list(Path(data_path).rglob("*.[pP][nN][gG]"))
+    csv_data = pandas.read_csv(main_csv)
+    print(1)
 
-# To test with original data
-train_csv = '/kaggle/input/UBC-OCEAN/train.csv'
-train_images = '/kaggle/input/UBC-OCEAN/train_images/'
-train_thumbnails = '/kaggle/input/UBC-OCEAN/train_thumbnails/'
-
-def load_image(idx):
-    try:
-        image = Image.open(train_thumbnails+str(idx)+'_thumbnail.png')
-    except:
-        image = Image.open(train_images+str(idx)+'.png')
-    image = image.resize((224,224))
-    image = np.array(image)
-    return image
-
-training_df = pd.read_csv(train_csv)
-n = len(training_df)
-
-images_val = []
-labels_val = []
-
-for i, (idx, label) in enumerate(zip(training_df['image_id'], training_df['label'])):
-    image = load_image(idx)
-    images_val.append(image)
-    labels_val.append(label)
-    print(f'Loading images ({train_images}): {i+1} / {n}',end='\r')
-
-images_val = np.array(images_val).reshape(-1, 224, 224, 3)
-labels_one_hot_val = values_to_one_hot(labels_val, classes)
+    # Eyeballed at 15Mb in total, acceptable
+    dataset = []
 
 
-# Loading all training images
-images_wsi, labels_wsi, confidences_wsi = load_data(aug_wsi_images)
-images_tma, labels_tma, confidences_tma = load_data(aug_tma_images)
-images = np.concatenate((images_wsi, images_tma))
-labels_one_hot = np.concatenate((labels_wsi, labels_tma))
 
-# Loading pre-trained ResNet50 model
-# adding a final layer to change the number of output classes
-base_model = ResNet50(weights='imagenet', include_top=False)
-x = base_model.output
-x = GlobalAveragePooling2D()(x)
-predictions = Dense(len(classes), activation='softmax')(x)
-model = Model(inputs=base_model.input, outputs=predictions)
-# Not changing pre-trained layers
-for layer in base_model.layers:
-  layer.trainable = False
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-# Training model
-model.fit(images, labels_one_hot, epochs=20, batch_size=64, validation_data=(images_val, labels_one_hot_val))
+if __name__ == '__main__':
+    load_data()
 
-# Predicting validation set labels
-predicted = one_hot_to_values(model.predict(images_val), classes)
+    # Loading pre-trained ResNet101 model
+    # adding a final layer to change the number of output classes
+    model = ResNet101(include_top=False, classes=5)
+    # x = base_model.output
+    # x = GlobalAveragePooling2D()(x)
+    # predictions = Dense(len(classes), activation='softmax')(x)
+    # model = Model(inputs=base_model.input, outputs=predictions)
+
+    save_model(model, model_file)
+    #model = load_model(model_file)
+    print(1)
+
+    # Not changing pre-trained layers
+    # for layer in base_model.layers:
+    #     layer.trainable = False
+    # model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    # # Training model
+    # model.fit(images, labels_one_hot, epochs=20, batch_size=64, validation_data=(images_val, labels_one_hot_val))
+    #
+    # # Predicting validation set labels
+    # predicted = one_hot_to_values(model.predict(images_val), classes)
