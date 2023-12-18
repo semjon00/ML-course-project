@@ -5,9 +5,9 @@
 #SBATCH --error=unzip_error.log
 #SBATCH--mail-user=anton.malkovski@gmail.com
 #SBATCH--mail-type=ALL
-#SBATCH --partition=AMD
 
-cd /gpfs/space/home/amlk/data/source
+
+cd /gpfs/space/home/amlk/data
 
 module load python
 srun python ./augmentor.py
