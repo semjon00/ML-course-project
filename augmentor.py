@@ -8,9 +8,10 @@ import PIL
 import numpy
 import time
 from datetime import datetime
+import traceback
 PIL.Image.MAX_IMAGE_PIXELS = None  # Otherwise it thinks that the images are oversized and may be compression bombs
 
-tma_crops = 2000  # Per image, there are 25 TMA images in the training set
+tma_crops = 1200  # Per image, there are 25 TMA images in the training set
 non_tma_crops = 300  # Per image, there are 513 non-TMA images
 
 boring_cutoff = 0.3  # pictures with bigger proportion of boring pixels will be discarded
@@ -95,32 +96,36 @@ if __name__ == '__main__':
     to_path.mkdir(parents=True, exist_ok=True)
 
     for pat in source_files:
-        p = pat.parts[-1]
-        info = csv_data.loc[csv_data['image_id'] == int(p.split('.')[0])]
-        tumor_class = list(info['label'])[0]
-        is_tma = list(info['is_tma'])[0]
-        n_crops = tma_crops if is_tma else non_tma_crops
-        to_path_suffix = 'tma' if is_tma else 'wsi'
+        try:
+            p = pat.parts[-1]
+            info = csv_data.loc[csv_data['image_id'] == int(p.split('.')[0])]
+            tumor_class = list(info['label'])[0]
+            is_tma = list(info['is_tma'])[0]
+            n_crops = tma_crops if is_tma else non_tma_crops
+            to_path_suffix = 'tma' if is_tma else 'wsi'
 
-        img = PIL.Image.open(pat)
-        mask: PIL.Image = None
-        if p in mask_files:
-            mask = PIL.Image.open(mask_path / p)
-        i = 0
-        for crop, confidence in augmenting_generator(picture=img, n_crops=20, mask=mask, it=to_path_suffix):
-            if time.time() > last_reported + 60:
-                last_reported = time.time()
-                print(f'{datetime.utcfromtimestamp(last_reported)}  Crops: {done_crops}, images: {processed_images}')
-            save_to = to_path / to_path_suffix / Path(*pat.parts[2:-1])
-            save_to.mkdir(parents=True, exist_ok=True)
-            fn = f'crop_{str(p).split(".")[0]}_{i}'
-            crop.save(save_to / str(fn + '.png'))
-            crop.close()
-            open(save_to / str(fn + '.txt'), 'w').write(f'{tumor_class} {confidence}')
-            i += 1
-            done_crops += 1
-        img.close()
-        if mask is not None:
-            mask.close()
-        processed_images += 1
-    print(f'Cropper-chopper 2000 gracefully stopped at {datetime.fromtimestamp(last_reported)}')
+            img = PIL.Image.open(pat)
+            mask: PIL.Image = None
+            if p in mask_files:
+                mask = PIL.Image.open(mask_path / p)
+            i = 0
+            for crop, confidence in augmenting_generator(picture=img, n_crops=20, mask=mask, it=to_path_suffix):
+                save_to = to_path / to_path_suffix / Path(*pat.parts[2:-1])
+                save_to.mkdir(parents=True, exist_ok=True)
+                fn = f'crop_{str(p).split(".")[0]}_{i}'
+                crop.save(save_to / str(fn + '.png'))
+                crop.close()
+                open(save_to / str(fn + '.txt'), 'w').write(f'{tumor_class} {confidence}')
+                i += 1
+                done_crops += 1
+            img.close()
+            if mask is not None:
+                mask.close()
+            processed_images += 1
+        except Exception as e:
+            print(f'Oh, no! Something broke!!! {traceback.format_exc()}')
+        if time.time() > last_reported + 60:
+            last_reported = time.time()
+            print(f'{datetime.utcfromtimestamp(last_reported)}  Crops: {done_crops}, images: {processed_images}')
+    print(f'{datetime.utcfromtimestamp(time.time())}  Crops: {done_crops}, images: {processed_images}')
+    print(f'Cropper-chopper 2000 gracefully stopped at {datetime.fromtimestamp(time.time())}')
