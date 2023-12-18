@@ -6,16 +6,6 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=00:20:00
 
-
-
-# Navigate to the directory where the zip file is located
-cd /gpfs/space/home/amlk/UBC-OCEAN.zip
-
-# Extract the zip file into train_images folder
-unzip unzip UBC-OCEAN.zip -d train_images
-
-#Had this code but deleted in hopes the simpler approach would work
-'''
 module load python/3.8.6
 
 import zipfile
@@ -34,4 +24,4 @@ extract_to_path = '/gpfs/space/home/amlk/train_images'
 if not os.path.exists(extract_to_path):
     os.makedirs(extract_to_path)
 
-unzip_file(zip_file_path, extract_to_path)'''
+unzip_file(zip_file_path, extract_to_path)
