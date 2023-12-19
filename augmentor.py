@@ -13,8 +13,8 @@ PIL.Image.MAX_IMAGE_PIXELS = None  # Otherwise it thinks that the images are ove
 
 yolo_confidence_score = 0.2
 
-tma_crops = 1200  # Per image, there are 25 TMA images in the training set
-non_tma_crops = 300  # Per image, there are 513 non-TMA (wsi) images
+tma_crops = 600  # Per image, there are 25 TMA images in the training set
+non_tma_crops = 150  # Per image, there are 513 non-TMA (wsi) images
 
 boring_cutoff = 0.45  # pictures with bigger proportion of boring pixels will be discarded
 borders_expansion = 0.1  # Expand picture by how much on the sides? Useful for better representing borders
@@ -29,7 +29,7 @@ mask_path = Path('data') / 'masks'
 to_path = Path('data') / 'augmented'
 main_csv = Path('data') / 'train.csv'
 
-def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure'):
+def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure', skip_boring=True):
     max_side = max(picture.size)
 
     def p_to_px(p):
@@ -69,17 +69,19 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure
         if do_random_flip and random.randint(0, 1) == 1:
             crop = crop.transpose(PIL.Image.FLIP_TOP_BOTTOM)
 
-        # Ouch, I don't like this code. Looks not performant at all.
         total += 1
-        boring = numpy.sum(numpy.sum(numpy.array(crop), axis=2) == 0) / aug_side_px / aug_side_px
-        if boring > boring_cutoff:
-            continue
+        # Allow some boring crops nontheless
+        if skip_boring and random.random() < 0.9:
+            # Ouch, I don't like this code. Looks not performant at all.
+            boring = numpy.sum(numpy.sum(numpy.array(crop), axis=2) == 0) / aug_side_px / aug_side_px
+            if boring > boring_cutoff:
+                continue
 
         # Base confidence - no idea what part of the image is cancer
         confidence = yolo_confidence_score  # YOLO
         if mask:
             mask_crop = make_crop(mask, chosen, pc_size)
-            confidence = numpy.average(numpy.array(mask_crop)[:, :, 0]) / 255
+            confidence = 0.05 + 0.95 * (numpy.average(numpy.array(mask_crop)[:, :, 0]) / 255)
         succesful += 1
         yield crop, confidence
 
@@ -156,6 +158,6 @@ if __name__ == '__main__':
             print(f'Oh, no! Something broke!!! {traceback.format_exc()}')
         if time.time() > last_reported + 60:
             last_reported = time.time()
-            print(f'{datetime.utcfromtimestamp(last_reported)}  Crops: {done_crops}, images: {processed_images}')
-    print(f'{datetime.utcfromtimestamp(time.time())}  Crops: {done_crops}, images: {processed_images}')
+            print(f'{datetime.fromtimestamp(last_reported)}  Crops: {done_crops}, images: {processed_images}')
+    print(f'{datetime.fromtimestamp(time.time())}  Crops: {done_crops}, images: {processed_images}')
     print(f'Cropper-chopper 2000 gracefully stopped at {datetime.fromtimestamp(time.time())}')
