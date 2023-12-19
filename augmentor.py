@@ -125,6 +125,8 @@ if __name__ == '__main__':
         train_val_split(csv_data)
 
     source_files = list(Path(source_path).rglob("*.[pP][nN][gG]"))
+    random.seed(1337)
+    random.shuffle(source_files)
     print(f'Source files: {len(source_files)} in total')
     mask_files = os.listdir(mask_path)
     print(f'Mask files: {len(mask_files)} in total')

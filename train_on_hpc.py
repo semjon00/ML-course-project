@@ -9,7 +9,7 @@ import pandas
 import time
 from datetime import datetime
 
-
+import tensorflow.keras.backend as K
 from tensorflow.keras.applications.resnet import ResNet101
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
@@ -26,7 +26,7 @@ aug_side_px = 512
 
 classes = ('CC', 'EC', 'HGSC', 'LGSC', 'MC')
 
-lr = 0.001
+lr = 0.002
 
 batch_n = 64
 mega_batch_n = 4 * batch_n
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     val_wsi = val_data.loc[val_data['type'] == 'wsi']
 
     random.seed(1337)
-    for obj in [train_data, val_tma, val_wsi]:
+    for obj in [train_data, val_data, val_tma, val_wsi]:
         order = list(obj.index)
         random.shuffle(order)
         obj.reindex(order)
@@ -106,24 +106,37 @@ if __name__ == '__main__':
     else:
         raise Exception('starting_from_scratch=False is not implemented, '
                         'please implement yourself, commit-push-pull, and restart the job.')
-    model.compile(optimizer=Adam(lr=lr), loss='categorical_crossentropy', metrics=['accuracy', 'mse'])
+    def custom_accuracy(true, pred):
+        return K.mean(K.equal(K.argmax(true, axis=-1), K.argmax(pred, axis=-1)))
 
-    # Training model
+    model.compile(optimizer=Adam(lr=lr), loss='categorical_crossentropy', metrics=['mse', custom_accuracy])
+
+    # Eval things
+    # TODO: We want eval for training set, TSI and non-TSI
+    val_images = np.zeros((mega_batch_n, aug_side_px, aug_side_px, 3))
+    val_target = np.zeros((mega_batch_n, len(classes)))
+    cur_eval = val_data.iloc[0:mega_batch_n]
+    load_images(val_images, cur_eval)
+    set_target(val_target, cur_eval)
+
+    metrics = model.evaluate(val_images, val_target, batch_size=batch_n)
+
+    # Training
     hot_images = np.zeros((mega_batch_n, aug_side_px, aug_side_px, 3))
     target = np.zeros((mega_batch_n, len(classes)))
-    for cur_start_i in range(0, len(train_data), 256):
+    for cur_start_i in range(0, len(train_data), mega_batch_n):
         print(f'{datetime.fromtimestamp(time.time())} Done: {cur_start_i}/{len(train_data)}')
         if cur_start_i % save_on == 0:
             save_model(model, model_file_start + str(cur_start_i))
+            print(f'{datetime.fromtimestamp(time.time())} Saved the snapshot of the model.')
+            metrics = model.evaluate(val_images, val_target, batch_size=batch_n)
+            print(f'{datetime.fromtimestamp(time.time())} Eval metrics: {metrics}')
 
-        cur = train_data.loc[cur_start_i:cur_start_i+mega_batch_n]
+        cur = train_data.iloc[cur_start_i:cur_start_i+mega_batch_n]
         load_images(hot_images, cur)
         set_target(target, cur)
-        model.fit(hot_images, target, epochs=1, batch_size=batch_n, validation_data=())
+        model.fit(hot_images, target, epochs=1, batch_size=batch_n, validation_data=(val_images, val_target))
         print(f'{datetime.fromtimestamp(time.time())} Eval not implemented, please implement!')
-        # TODO: eval. Keep in mind - we can not eval on the entire eval set, its too large!
-        # TODO: Make sure to load reasonable ammount of things, for both TSI and non-TSI images
-        # TODO: We also want eval for training set
 
     save_model(model, model_file_start + 'last')
     print(f'{datetime.fromtimestamp(time.time())} '
