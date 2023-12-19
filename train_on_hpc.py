@@ -120,6 +120,7 @@ if __name__ == '__main__':
     set_target(val_target, cur_eval)
 
     metrics = model.evaluate(val_images, val_target, batch_size=batch_n)
+    print(f'{datetime.fromtimestamp(time.time())} Initial eval metrics: {metrics}')
 
     # Training
     hot_images = np.zeros((mega_batch_n, aug_side_px, aug_side_px, 3))
