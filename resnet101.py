@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from tensorflow.keras.applications import ResNet101
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from sklearn.model_selection import train_test_split
@@ -19,15 +20,15 @@ def get_class(file_path):
 
 # Get the list of image files
 tmi_files = glob.glob('/gpfs/space/home/amlk/data/augmented/tmi/*.png')
-wsi_files = glob.glob('/gpfs/space/home/amlk/data/augmented/wsi/*.png')
+
 
 # Get the class labels
 tmi_labels = [get_class(f) for f in tmi_files]
-wsi_labels = [get_class(f) for f in wsi_files]
+
 
 # Combine the TMI and WSI datasets
-all_files = tmi_files + wsi_files
-all_labels = tmi_labels + wsi_labels
+all_files = tmi_files 
+all_labels = tmi_labels
 
 # Convert class labels to integer indices
 encoder = LabelEncoder()
@@ -37,16 +38,51 @@ all_labels_encoded = encoder.fit_transform(all_labels)
 train_files, val_files, train_labels_encoded, val_labels_encoded = train_test_split(all_files, all_labels_encoded, test_size=0.1)
 
 # Convert integer indices to one-hot encoded labels
-num_classes = len(class_names)
-train_labels_onehot = to_categorical(train_labels_encoded, num_classes=num_classes)
-val_labels_onehot = to_categorical(val_labels_encoded, num_classes=num_classes)
+train_labels_onehot = to_categorical(train_labels_encoded, num_classes=6)
+val_labels_onehot = to_categorical(val_labels_encoded, num_classes=6)
 
 # Create an image data generator
-datagen = ImageDataGenerator(rescale=1./255)
+class CustomDataGenerator(tf.keras.utils.Sequence):
+    def __init__(self, image_files, labels, batch_size, dim, n_classes):
+        self.image_files = image_files
+        self.labels = labels
+        self.batch_size = batch_size
+        self.dim = dim
+        self.n_classes = n_classes
+
+    def __len__(self):
+        return int(np.floor(len(self.image_files) / self.batch_size))
+
+    def __getitem__(self, index):
+        # Calculate the start and end indices for this batch
+        start_idx = index * self.batch_size
+        end_idx = min(start_idx + self.batch_size, len(self.image_files))
+
+        # Get the list of image files for this batch
+        image_files_temp = self.image_files[start_idx:end_idx]
+
+        # Get the corresponding labels
+        labels_temp = self.labels[start_idx:end_idx]
+
+        # Generate the data for this batch
+        X, y = self.__data_generation(image_files_temp, labels_temp)
+
+        return X, y
+
+    def __data_generation(self, image_files_temp, labels_temp):
+        X = np.empty((len(image_files_temp), *self.dim, 3))
+        y = np.empty((len(labels_temp), self.n_classes))
+
+        for i, image_file in enumerate(image_files_temp):
+            img = tf.keras.preprocessing.image.load_img(image_file, target_size=self.dim)
+            X[i,] = tf.keras.preprocessing.image.img_to_array(img)
+            y[i] = labels_temp[i]
+
+        return X / 255.0, y
 
 # Create the training and validation data generators
-train_gen = datagen.flow_from_directory(directory="/gpfs/space/home/amlk/data/augmented", target_size=(512, 512), batch_size=32, class_mode='categorical')
-val_gen = datagen.flow_from_directory(directory='/gpfs/space/home/amlk/data/augmented', target_size=(512, 512), batch_size=32, class_mode='categorical')
+train_gen = CustomDataGenerator(train_files, train_labels_onehot, batch_size=32, dim=(512, 512), n_classes=6)
+val_gen = CustomDataGenerator(val_files, val_labels_onehot, batch_size=32, dim=(512, 512), n_classes=6)
 
 # Load the pretrained ResNet-101 model
 base_model = ResNet101(weights='imagenet', include_top=False, input_shape=(512, 512, 3))
