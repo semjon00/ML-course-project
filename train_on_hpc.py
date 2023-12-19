@@ -2,84 +2,43 @@ import random
 import warnings
 warnings.filterwarnings('ignore')
 
-import os
-import pandas as pd
 import numpy as np
 from PIL import Image
 from pathlib import Path
 import pandas
 import time
-import datetime
+from datetime import datetime
 
-from augmentor import yolo_confidence_score
+from augmentor import yolo_confidence_score, aug_side_px
 
 from tensorflow.keras.applications.resnet import ResNet101
-from keras.models import Model
-from keras.models import load_model, save_model
-from keras.layers import Dense, GlobalAveragePooling2D
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import balanced_accuracy_score
+from tensorflow.keras import layers
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import Model
+from tensorflow.keras.models import load_model, save_model
 
 # Paths
 data_path = Path('./data/augmented/')
 main_csv = './data/train.csv'
-model_file = './models/model_last'
+model_file_start = './models/model_'
 
-classes = ['CC', 'EC', 'HGSC', 'LGSC', 'MC']
+classes = ('CC', 'EC', 'HGSC', 'LGSC', 'MC')
 
-# If the best prediction probability is below that threshold, it's labelled as 'Other'
-threshold = 0.3
+lr = 0.001
+
+batch_n = 64
+mega_batch_n = 4 * batch_n
+save_on = 256 * batch_n
 
 # To convert labels to one-hot vectors and vice-versa
-def values_to_one_hot(values, classes):
-    vector = []
-    for value in values:
-        one_hot = np.zeros(5)
-        one_hot[classes.index(value)] = 1
-        vector.append(one_hot)
-    return np.array(vector)
-
-def one_hot_to_values(vector, classes):
-    values = []
-    for one_hot in vector:
-        if np.max(one_hot) < threshold:
-            value = 'Other'
-        else:
-            value = classes[np.argmax(one_hot)]
-        values.append(value)
-    return np.array(values)
+def set_target(to, fro, cl=classes):
+    labels = list(fro['label'])
+    confs = list(fro['conf'])
+    for i, label in enumerate(labels):
+        to[i][cl.index(label)] = confs[i]
 
 
-def loaddddd(root):
-    files = os.listdir(root)
-    n = len(files)
-    images = []
-    labels = []
-    confidences = []
-    # Loading augmented images and labels
-    for i, file in enumerate(files):
-        if file.endswith(".png"):
-            image_id = os.path.splitext(file)[0]
-            label_path = os.path.join(root, f"{image_id}.txt")
-            if os.path.exists(label_path):
-                with open(label_path, "r") as label_file:
-                    label, confidence = label_file.read().strip().split()
-                image_path = os.path.join(root, file)
-                image = Image.open(image_path)
-                image = image.resize((224, 224)) # Resizing to 244x244 for Resnet model
-                images.append(np.array(image))
-                labels.append(label)
-                confidences.append(confidence)
-        print(f'Loading images ({root}): {i+1} / {n}',end='\r')
-    print()
-    # Converting labels to one-hot vectors 
-    labels_one_hot = values_to_one_hot(labels, classes)
-    # Reshaping image array for model training
-    images = np.array(images).reshape(-1, 224, 224, 3)
-    return images, labels_one_hot, confidences
-
-
-def load_data():
+def load_master_data():
     # Eyeballed at 15Mb in total, acceptable
 
     img_filenames = list(Path(data_path).rglob("*.[pP][nN][gG]"))
@@ -104,35 +63,66 @@ def load_data():
                                           'filename', 'type', 'split'])
 
 
-if __name__ == '__main__':
-    print(f'{datetime.utcfromtimestamp(time.time())} The eternaly dormant beast has awaken to channel light and feel heat.')
+def load_images(out, filenames):
+    # Last batch might feed some images the second time, whatever
+    if isinstance(filenames, pandas.DataFrame):
+        filenames = filenames['filename']
+    for i, fn in enumerate(filenames):
+        img = Image.open(fn)
+        out[i] = np.array(img)
+        img.close()
 
-    master_data = load_data()
+
+if __name__ == '__main__':
+    print(f'{datetime.fromtimestamp(time.time())} '
+          f'The eternally dormant beast has awaken to channel light and cause heat.')
+
+    master_data = load_master_data()
     train_data = master_data.loc[master_data['split'] == 'train']
     val_data = master_data.loc[master_data['split'] == 'val']
+    val_tma = val_data.loc[val_data['type'] == 'tma']
+    val_wsi = val_data.loc[val_data['type'] == 'wsi']
 
     random.seed(1337)
-    for obj in [train_data, val_data]:
-        random.shuffle(obj)
+    for obj in [train_data, val_tma, val_wsi]:
+        order = list(obj.index)
+        random.shuffle(order)
+        obj.reindex(order)
 
-    # Loading pre-trained ResNet101 model
-    # adding a final layer to change the number of output classes
-    model = ResNet101(include_top=True, classes=5)
-    # x = base_model.output
-    # x = GlobalAveragePooling2D()(x)
-    # predictions = Dense(len(classes), activation='softmax')(x)
-    # model = Model(inputs=base_model.input, outputs=predictions)
+    starting_from_scratch = True
+    if starting_from_scratch:
+        model = ResNet101(weights="imagenet", include_top=False, classes=5, input_shape=(512, 512, 3))
+        for layer in model.layers:
+            layer.trainable = True
+        x = model.output
+        x = layers.GlobalAveragePooling2D()(x)
+        x = layers.Dense(256, activation='relu')(x)
+        #x = layers.Dropout(0.05)(x)
+        predictions = layers.Dense(len(classes), activation='softmax')(x)
+        model = Model(inputs=model.input, outputs=predictions)
+        # TODO: integration hazard: check that it works with the notebook
+    else:
+        raise Exception('starting_from_scratch=False is not implemented, '
+                        'please implement yourself, commit-push-pull, and restart the job.')
+    model.compile(optimizer=Adam(lr=lr), loss='categorical_crossentropy', metrics=['accuracy', 'mse'])
 
-    #save_model(model, model_file)
-    #model = load_model(model_file)
-    #print(1)
+    # Training model
+    hot_images = np.zeros((mega_batch_n, aug_side_px, aug_side_px, 3))
+    target = np.zeros((mega_batch_n, len(classes)))
+    for cur_start_i in range(0, len(train_data), 256):
+        print(f'{datetime.fromtimestamp(time.time())} Done: {cur_start_i}/{len(train_data)}')
+        if cur_start_i % save_on == 0:
+            save_model(model, model_file_start + str(cur_start_i))
 
-    # Not changing pre-trained layers
-    # for layer in base_model.layers:
-    #     layer.trainable = False
-    # model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-    # # Training model
-    # model.fit(images, labels_one_hot, epochs=1, batch_size=64, validation_data=(images_val, labels_one_hot_val))
-    #
-    # # Predicting validation set labels
-    # predicted = one_hot_to_values(model.predict(images_val), classes)
+        cur = train_data.loc[cur_start_i:cur_start_i+mega_batch_n]
+        load_images(hot_images, cur)
+        set_target(target, cur)
+        model.fit(hot_images, target, epochs=1, batch_size=batch_n, validation_data=())
+        print(f'{datetime.fromtimestamp(time.time())} Eval not implemented, please implement!')
+        # TODO: eval. Keep in mind - we can not eval on the entire eval set, its too large!
+        # TODO: Make sure to load reasonable ammount of things, for both TSI and non-TSI images
+        # TODO: We also want eval for training set
+
+    save_model(model, model_file_start + 'last')
+    print(f'{datetime.fromtimestamp(time.time())} '
+          f'The process as suffered a glorious death. Its job is complete.')
