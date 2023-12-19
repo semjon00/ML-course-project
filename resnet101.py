@@ -19,16 +19,16 @@ def get_class(file_path):
     return class_label
 
 # Get the list of image files
-tmi_files = glob.glob('/gpfs/space/home/amlk/data/augmented/tmi/*.png')
+_files = glob.glob('/gpfs/space/home/amlk/data/augmented/tma/*.png')
 
 
 # Get the class labels
-tmi_labels = [get_class(f) for f in tmi_files]
+_labels = [get_class(f) for f in _files]
 
 
 # Combine the TMI and WSI datasets
-all_files = tmi_files 
-all_labels = tmi_labels
+all_files = _files 
+all_labels = _labels
 
 # Convert class labels to integer indices
 encoder = LabelEncoder()
