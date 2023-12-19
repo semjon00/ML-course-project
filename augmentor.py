@@ -14,8 +14,8 @@ PIL.Image.MAX_IMAGE_PIXELS = None  # Otherwise it thinks that the images are ove
 
 yolo_confidence_score = 0.2
 
-tma_crops = 600  # Per image, there are 25 TMA images in the training set
-non_tma_crops = 150  # Per image, there are 513 non-TMA (wsi) images
+tma_crops = 300  # Per image, there are 25 TMA images in the training set
+non_tma_crops = 75  # Per image, there are 513 non-TMA (wsi) images
 
 boring_cutoff = 0.45  # pictures with bigger proportion of boring pixels will be discarded
 borders_expansion = 0.1  # Expand picture by how much on the sides? Useful for better representing borders
@@ -30,7 +30,9 @@ mask_path = Path('data') / 'masks'
 to_path = Path('data') / 'augmented'
 main_csv = Path('data') / 'train.csv'
 
+time_spent_cropping = 0
 def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure', skip_boring=True):
+    global time_spent_cropping
     max_side = max(picture.size)
 
     def p_to_px(p):
@@ -49,6 +51,8 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure
         rot_off = (pre_crop.size[0] - p_to_px(size)) // 2
         return pre_crop.crop((rot_off, rot_off, pre_crop.size[0] - rot_off, pre_crop.size[1] - rot_off))
 
+    _ = picture.getpixel((0, 0))  # Load image
+    started_cropping = time.time()
     succesful = 0
     total = 0
     while succesful < n_crops:
@@ -87,6 +91,7 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure
         succesful += 1
         yield crop, confidence
         del crop
+    time_spent_cropping += time.time() - started_cropping
 
 
 def train_val_split(csv_data):
@@ -167,4 +172,5 @@ if __name__ == '__main__':
             last_reported = time.time()
             print(f'{datetime.fromtimestamp(last_reported)}  Crops: {done_crops}, images: {processed_images}')
     print(f'{datetime.fromtimestamp(time.time())}  Crops: {done_crops}, images: {processed_images}')
+    print(f'{datetime.fromtimestamp(time.time())}  Time spent cropping: {time_spent_cropping}')
     print(f'Cropper-chopper 2000 gracefully stopped at {datetime.fromtimestamp(time.time())}')
