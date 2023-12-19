@@ -9,7 +9,6 @@ import pandas
 import time
 from datetime import datetime
 
-from augmentor import yolo_confidence_score, aug_side_px
 
 from tensorflow.keras.applications.resnet import ResNet101
 from tensorflow.keras import layers
@@ -21,6 +20,9 @@ from tensorflow.keras.models import load_model, save_model
 data_path = Path('./data/augmented/')
 main_csv = './data/train.csv'
 model_file_start = './models/model_'
+
+yolo_confidence_score = 0.2
+aug_side_px = 512
 
 classes = ('CC', 'EC', 'HGSC', 'LGSC', 'MC')
 
