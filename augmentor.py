@@ -139,7 +139,7 @@ if __name__ == '__main__':
             if p in mask_files:
                 mask = PIL.Image.open(mask_path / p)
             i = 0
-            for crop, confidence in augmenting_generator(picture=img, n_crops=20, mask=mask, it=to_path_suffix):
+            for crop, confidence in augmenting_generator(picture=img, n_crops=n_crops, mask=mask, it=to_path_suffix):
                 save_to = to_path / to_path_suffix / Path(*pat.parts[2:-1])
                 save_to.mkdir(parents=True, exist_ok=True)
                 fn = f'crop_{str(p).split(".")[0]}_{i}'
