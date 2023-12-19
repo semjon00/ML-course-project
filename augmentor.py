@@ -1,3 +1,4 @@
+import gc
 import os
 import random
 import math
@@ -75,6 +76,7 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure
             # Ouch, I don't like this code. Looks not performant at all.
             boring = numpy.sum(numpy.sum(numpy.array(crop), axis=2) == 0) / aug_side_px / aug_side_px
             if boring > boring_cutoff:
+                crop.close()
                 continue
 
         # Base confidence - no idea what part of the image is cancer
@@ -84,6 +86,7 @@ def augmenting_generator(picture: PIL.Image, n_crops: int, mask=None, it='unsure
             confidence = 0.05 + 0.95 * (numpy.average(numpy.array(mask_crop)[:, :, 0]) / 255)
         succesful += 1
         yield crop, confidence
+        del crop
 
 
 def train_val_split(csv_data):
@@ -128,6 +131,7 @@ if __name__ == '__main__':
     to_path.mkdir(parents=True, exist_ok=True)
 
     for pat in source_files:
+        gc.collect()
         try:
             p = pat.parts[-1]
             info = csv_data.loc[csv_data['image_id'] == int(p.split('.')[0])]
@@ -147,6 +151,7 @@ if __name__ == '__main__':
                 fn = f'crop_{str(p).split(".")[0]}_{i}'
                 crop.save(save_to / str(fn + '.png'))
                 crop.close()
+                del crop
                 open(save_to / str(fn + '.txt'), 'w').write(f'{tumor_class} {confidence}')
                 i += 1
                 done_crops += 1
