@@ -14,7 +14,7 @@ PIL.Image.MAX_IMAGE_PIXELS = None  # Otherwise it thinks that the images are ove
 yolo_confidence_score = 0.2
 
 tma_crops = 1200  # Per image, there are 25 TMA images in the training set
-non_tma_crops = 300  # Per image, there are 513 non-TMA images
+non_tma_crops = 300  # Per image, there are 513 non-TMA (wsi) images
 
 boring_cutoff = 0.45  # pictures with bigger proportion of boring pixels will be discarded
 borders_expansion = 0.1  # Expand picture by how much on the sides? Useful for better representing borders
@@ -88,6 +88,7 @@ def train_val_split(csv_data):
     print('Causing train-val split!')
 
     pictures = os.listdir(source_path)
+    print(f'For {len(pictures)} pictures... {", ".join(pictures)}')
     tma = [p for p in pictures if any([csv_data.loc[csv_data['image_id'] == int(p.split('.')[0])] for p in pictures][0]['is_tma'])]
     non_tma = [p for p in pictures if p not in tma]
 
@@ -96,9 +97,9 @@ def train_val_split(csv_data):
 
     def distribute(ptype):
         random.shuffle(ptype)
-        for p in ptype[:int(len(ptype) * 0.8 + 0.99)]:
+        for p in ptype[:int(len(ptype) * 0.83 + 0.99)]:
             os.rename(source_path / p, source_path / 'train' / p)
-        for p in ptype[int(len(ptype) * 0.8 + 0.99):]:
+        for p in ptype[int(len(ptype) * 0.83 + 0.99):]:
             os.rename(source_path / p, source_path / 'val' / p)
     distribute(tma)
     distribute(non_tma)
